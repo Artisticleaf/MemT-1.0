@@ -30,8 +30,9 @@ def candidate_slots_per_transaction():
 
 def partial_decode_quanta():
     value = os.environ.get("MEMT_PARTIAL_DECODE_QUANTA", "0")
-    if not value.isdecimal() or int(value) > 64:
-        raise ValueError("MEMT_PARTIAL_DECODE_QUANTA must be an integer from 0 to 64")
+    # This is an operator fairness budget, not a tensor shape or capacity limit.
+    if not value.isdecimal():
+        raise ValueError("MEMT_PARTIAL_DECODE_QUANTA must be a nonnegative integer")
     return int(value)
 
 

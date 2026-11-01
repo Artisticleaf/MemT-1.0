@@ -7,10 +7,25 @@ from types import SimpleNamespace as NS
 from unittest.mock import patch
 
 from memt_sglang.protocol import MemoryRequest
+from memt_sglang.runtime.features import partial_decode_quanta
 from memt_sglang.runtime.partial_scheduler import (
     fragment_tokens,
     install_partial_prefill,
 )
+
+
+def test_decode_fairness_budget_is_not_a_shape_allowlist(monkeypatch):
+    for value in (0, 1, 64, 65, 1024):
+        monkeypatch.setenv("MEMT_PARTIAL_DECODE_QUANTA", str(value))
+        assert partial_decode_quanta() == value
+    for value in ("-1", "1.5", "invalid"):
+        monkeypatch.setenv("MEMT_PARTIAL_DECODE_QUANTA", value)
+        try:
+            partial_decode_quanta()
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Invalid fairness budget was accepted")
 
 
 class SchedulerContract(unittest.TestCase):
