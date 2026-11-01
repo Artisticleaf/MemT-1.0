@@ -100,6 +100,9 @@ def cpu_modules(monkeypatch):
         "memt_sglang.models.deepseek.ops.compiled_tensor_ops",
         resolve_grouped_qkv_expansion=lambda: tensor_ops.expand_grouped_qkv,
         resolve_head_expansion=lambda: tensor_ops.expand_head_projections,
+        resolve_read_query_expansion=lambda: tensor_ops.expand_read_query,
+        resolve_read_output_gate=lambda: tensor_ops.expand_read_output_gate,
+        resolve_read_query_normalization=lambda: tensor_ops.normalize_read_query,
         resolve_stable_qk=lambda: tensor_ops.prepare_stable_qk,
         resolve_gated_rms_norm=lambda: tensor_ops._gated_rms_norm,
         grouped_epsilon=lambda values, latent: (
@@ -227,6 +230,11 @@ def test_flash_query_dispatch_and_math(
         ),
         gate,
     ).reshape(-1, 8)
+    # The reference above exercises the full writer projections. A real read
+    # must produce the same result without entering those projection graphs.
+    monkeypatch.setattr(
+        block, "_project", Mock(side_effect=AssertionError("query projected writer"))
+    )
     fast = Mock(wraps=packed_snapshot_read)
     monkeypatch.setattr(cpu_modules.flash, "packed_snapshot_read", fast)
     gather = Mock(
