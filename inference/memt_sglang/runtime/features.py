@@ -209,8 +209,9 @@ def sync_graph_config(args):
             raise ValueError(
                 "Memory decode graph requires breakable decode and SLOT_READ=1"
             )
-        if any(overlap_phases()):
-            raise ValueError("Memory decode graph requires overlap scheduling disabled")
+        # Native CPU/GPU schedule overlap still submits each rank's work to one
+        # ordered forward stream. MemoryDecodeGraph enforces that stream identity
+        # and retains pending pinned uploads; PDMux is a different execution model.
         if getattr(args, "enable_pdmux", False):
             raise ValueError(
                 "Memory decode graph does not support concurrent PDMux streams"

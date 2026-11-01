@@ -28,6 +28,7 @@ class MemoryDecodeGraph:
         self.uploads = 0
         self._last_slots = None
         self._host_buffers = []
+        self._replay_stream = None
 
     def note_fallback(self, reason):
         self.fallbacks[reason] += 1
@@ -95,6 +96,14 @@ class MemoryDecodeGraph:
     def upload(self, runtime):
         if self.slots is None:
             raise RuntimeError("Memory graph has not been captured")
+        stream = torch.cuda.current_stream(self.slots.device)
+        if self._replay_stream is None:
+            self._replay_stream = stream
+        elif stream != self._replay_stream:
+            # A shared device slot buffer is safe when copies and graph reads are
+            # ordered on one stream, including native schedule overlap. Concurrent
+            # streams require separate replay storage, not a configuration bypass.
+            raise RuntimeError("Memory graph replay changed its ordered CUDA stream")
         values = replay_slots(runtime, self.slots.numel())
         if values != self._last_slots:
             # Never rewrite pinned storage while a prior asynchronous upload

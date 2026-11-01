@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 import pytest
+import torch
 
 from memt_sglang.protocol import MemoryRequest
 from memt_sglang.runtime.executor import MemoryRuntime
 from memt_sglang.runtime.features import sync_graph_config
-from memt_sglang.runtime.memory_graph import replay_slots
+from memt_sglang.runtime.memory_graph import MemoryDecodeGraph, replay_slots
 from memt_sglang.runtime.plan import Sample, StepPlan
 from memt_sglang.runtime.state import StatePool
 
@@ -90,7 +91,6 @@ def test_invalid_operation_and_capacity_are_not_silent_fallbacks():
     [
         ("disabled", "1", "0", False, "breakable"),
         ("breakable", "0", "0", False, "SLOT_READ"),
-        ("breakable", "1", "1", False, "overlap"),
         ("breakable", "1", "0", True, "PDMux"),
     ],
 )
@@ -115,3 +115,47 @@ def test_memory_graph_rejects_unsupported_execution(
     )
     with pytest.raises(ValueError, match=message):
         sync_graph_config(args)
+
+
+def test_pending_upload_storage_is_retained_and_replay_stream_is_ordered(monkeypatch):
+    """CPU lifetime simulation; actual CUDA ordering needs the GPU stress run."""
+    import memt_sglang.runtime.memory_graph as module
+
+    class Event:
+        complete = False
+
+        def query(self):
+            return self.complete
+
+        def record(self):
+            self.complete = False
+
+    current = [object()]
+    fake = SimpleNamespace(
+        cuda=SimpleNamespace(current_stream=lambda device: current[0], Event=Event),
+        empty=lambda count, dtype, pin_memory: torch.empty(count, dtype=dtype),
+        int64=torch.int64,
+        tensor=torch.tensor,
+    )
+    monkeypatch.setattr(module, "torch", fake)
+    values = [(0, -1)]
+    monkeypatch.setattr(module, "replay_slots", lambda rt, n: values[0])
+    graph = MemoryDecodeGraph(None)
+    graph.slots = torch.full((2,), -1, dtype=torch.int64)
+    graph.upload(None)
+    first, event = graph._host_buffers[0]
+    values[0] = (1, -1)
+    graph.upload(None)
+    assert len(graph._host_buffers) == 2
+    assert first.tolist() == [0, -1]
+    second = graph._host_buffers[1][0]
+    event.complete = True
+    values[0] = (2, -1)
+    graph.upload(None)
+    assert len(graph._host_buffers) == 2
+    assert first.tolist() == [2, -1] and second.tolist() == [1, -1]
+    assert graph.slots.tolist() == [2, -1]
+    # Even an unchanged slot list cannot permit a different graph replay stream.
+    current[0] = object()
+    with pytest.raises(RuntimeError, match="ordered CUDA stream"):
+        graph.upload(None)
