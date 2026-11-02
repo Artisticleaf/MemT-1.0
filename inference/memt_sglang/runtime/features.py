@@ -262,12 +262,16 @@ def validate_graphs(args):
             )
 
 
-def validate_query_chunks(args):
+def validate_query_chunks(args, *, chunk_tokens=None):
     """Query budgets follow native page geometry, not memory write-event size."""
     chunk = getattr(args, "chunked_prefill_size", None)
     policy = commit_chunk_policy()
     if policy != "atomic":
-        if type(chunk) is not int or chunk < (2048 if policy == "tail" else 1):
+        if policy == "tail" and (type(chunk_tokens) is not int or chunk_tokens < 1):
+            raise ValueError(
+                "Tail scheduling requires resolved memory write-event geometry"
+            )
+        if type(chunk) is not int or chunk < (chunk_tokens if policy == "tail" else 1):
             raise ValueError("Partial commit requires a positive native token budget")
         if any(overlap_phases()) or not args.disable_overlap_schedule:
             raise ValueError("Partial commit requires serialized scheduler execution")

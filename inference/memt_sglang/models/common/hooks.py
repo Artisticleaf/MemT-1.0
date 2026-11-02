@@ -106,7 +106,9 @@ class MemoryHooks:
                     install_partial_prefill,
                 )
 
-                install_partial_prefill()
+                install_partial_prefill(
+                    chunk_tokens=next(iter(self.blocks.values())).chunk_tokens
+                )
         elif enabled("QUERY_CHUNKS"):
             from memt_sglang.runtime.query_chunks import install_atomic_commit_guard
 

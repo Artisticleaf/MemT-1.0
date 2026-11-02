@@ -134,3 +134,15 @@ the Python programs. The seven-file manifest was regenerated and all 305 core
 CPU tests plus 12 subtests pass against the formatted dependency. Performance
 batch sources remain frozen separately; their results must keep those exact
 revision/patch identities.
+
+## Continuous extension: derive tail geometry from the model
+
+The tail scheduler's ordinary write block and SWA progress reservation now use
+the memory block's resolved `chunk_tokens`, rather than a second hard-coded
+2048. Startup validation uses the same resolved model field. Reinstalling one
+scheduler class with a different event geometry is rejected because its hooks
+already close over that geometry. Released 2048-token behavior is unchanged.
+CPU boundary/admission regressions also cover 512 and 4096 as scheduling
+geometry only; they do not qualify unmodified model kernels for those sizes.
+The extension passes 331 CPU tests and 12 subtests. Long-ingest/Agent GPU
+validation of this revised extension remains pending.

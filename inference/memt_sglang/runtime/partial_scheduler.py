@@ -13,20 +13,20 @@ from memt_sglang.protocol import MemoryRequest, is_memt_rid
 from memt_sglang.runtime.features import commit_chunk_policy, partial_decode_quanta
 
 
-def fragment_tokens(policy, total, prefix, budget, *, maximum=0):
+def fragment_tokens(policy, total, prefix, budget, *, chunk_tokens, maximum=0):
     if policy not in ("global", "tail"):
         raise ValueError("Partial policy must be global or tail")
-    if any(type(x) is not int for x in (total, prefix, budget, maximum)):
+    if any(type(x) is not int for x in (total, prefix, budget, maximum, chunk_tokens)):
         raise ValueError("Fragment limits must be integers")
-    if total < 1 or not 0 <= prefix < total or maximum < 0:
+    if total < 1 or not 0 <= prefix < total or maximum < 0 or chunk_tokens < 1:
         raise ValueError("Invalid logical fragment range")
     if budget <= 0:
         return 0
     remaining = total - prefix
-    if policy == "tail" and prefix < total // 2048 * 2048:
-        if prefix % 2048:
+    if policy == "tail" and prefix < total // chunk_tokens * chunk_tokens:
+        if prefix % chunk_tokens:
             raise ValueError("Ordinary block starts must be aligned")
-        return 2048 if budget >= 2048 else 0
+        return chunk_tokens if budget >= chunk_tokens else 0
     return min(remaining, budget, maximum or remaining)
 
 
@@ -37,19 +37,23 @@ def _nonnegative_env(name, default):
     return int(text)
 
 
-def partial_swa_floor(policy, requests, window, page, query_reserve):
+def partial_swa_floor(policy, requests, window, page, query_reserve, *, chunk_tokens):
     """Enough retained windows and one forward-progress fragment, in tokens."""
-    quantum = 2048 if policy == "tail" else page
+    quantum = chunk_tokens if policy == "tail" else page
     return requests * (window + 2 * page) + quantum + query_reserve
 
 
-def install_partial_prefill():
+def install_partial_prefill(*, chunk_tokens):
     from sglang.srt.managers.schedule_batch import Req
     from sglang.srt.managers.schedule_policy import AddReqResult, PrefillAdder
     from sglang.srt.managers.scheduler import Scheduler
     from sglang.srt.mem_cache.common import release_kv_cache
 
+    if type(chunk_tokens) is not int or chunk_tokens < 1:
+        raise ValueError("Memory write-event size must be a positive integer")
     if getattr(Scheduler, "_memt_partial_installed", False):
+        if Scheduler._memt_partial_chunk_tokens != chunk_tokens:
+            raise ValueError("Partial scheduler write-event geometry is immutable")
         return
     policy = commit_chunk_policy()
     if policy == "atomic":
@@ -89,7 +93,14 @@ def install_partial_prefill():
         window = scheduler.tree_cache.sliding_window_size
         page = scheduler.page_size
         retained = sum(not r.finished() for r, _ in records(scheduler).values())
-        return partial_swa_floor(policy, retained + extra, window, page, query_reserve)
+        return partial_swa_floor(
+            policy,
+            retained + extra,
+            window,
+            page,
+            query_reserve,
+            chunk_tokens=chunk_tokens,
+        )
 
     old_raw = Scheduler._get_new_batch_prefill_raw
 
@@ -171,7 +182,12 @@ def install_partial_prefill():
                 ),
             )
         count = fragment_tokens(
-            policy, request.length, prefix, int(room), maximum=maximum
+            policy,
+            request.length,
+            prefix,
+            int(room),
+            chunk_tokens=chunk_tokens,
+            maximum=maximum,
         )
         if count <= 0:
             return AddReqResult.OTHER
@@ -344,4 +360,5 @@ def install_partial_prefill():
         return old_abort(self, recv_req)
 
     Scheduler.abort_request = abort
+    Scheduler._memt_partial_chunk_tokens = chunk_tokens
     Scheduler._memt_partial_installed = True

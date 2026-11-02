@@ -122,7 +122,7 @@ def validate_server_args(
 
     validate_graphs(args)
     validate_overlap(args)
-    validate_query_chunks(args)
+    validate_query_chunks(args, chunk_tokens=chunk_tokens)
     if config_from_env() is not None:
         if not (
             (

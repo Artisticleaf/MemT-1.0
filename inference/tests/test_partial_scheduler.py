@@ -186,7 +186,7 @@ class SchedulerContract(unittest.TestCase):
         self.modules = patch.dict(sys.modules, mocks)
         self.modules.start()
         self.addCleanup(self.modules.stop)
-        install_partial_prefill()
+        install_partial_prefill(chunk_tokens=2048)
         return Req, Scheduler(), NS(batch_is_full=False), freed, retracted
 
     def finish_step(self, batch, spans):
@@ -290,11 +290,13 @@ class SchedulerContract(unittest.TestCase):
         self.assertEqual(spans[reqs[0].rid], [(0, 512), (512, 512)])
 
     def test_arbitrary_final_tail_and_invalid_limits(self):
-        self.assertEqual(fragment_tokens("tail", 4097, 4096, 1), 1)
-        self.assertEqual(fragment_tokens("global", 4097, 777, 113), 113)
-        self.assertEqual(fragment_tokens("tail", 4097, 0, 2047), 0)
+        self.assertEqual(fragment_tokens("tail", 4097, 4096, 1, chunk_tokens=2048), 1)
+        self.assertEqual(
+            fragment_tokens("global", 4097, 777, 113, chunk_tokens=2048), 113
+        )
+        self.assertEqual(fragment_tokens("tail", 4097, 0, 2047, chunk_tokens=2048), 0)
         with self.assertRaises(ValueError):
-            fragment_tokens("tail", 4097, 1, 2048)
+            fragment_tokens("tail", 4097, 1, 2048, chunk_tokens=2048)
 
     def test_swa_holds_windows_not_the_entire_logical_document(self):
         Req, s, running, _, _ = self.install(
