@@ -74,8 +74,9 @@ Core 分支恢复 atomic writer 的状态池和事务实现，仅保留 memory g
 - Core：286 tests + 12 subtests；continuous-commit：304 tests + 12 subtests，
   lint/format 均通过。后者已同步 core 配置和控制超时修复，独立分支保留。
 - c55344c 快档完整词表 graph/eager 比较：Nano C1/C32、Flash C1/C32/C96，
-  共 20,736 个独立位置全部逐位相同。真实非空 S、不同提示、固定 token 历史；
-  数值工具不用于计时。后续未改 memory tensor 运算，仍按来源明确标记结果。
+  共 20,736 个独立位置全部逐位相同。真实非空 S、相同提示、固定 token 历史；
+  数值工具不用于计时。核对发现该 driver 未使用 DIVERSE，已纠正范围，
+  另补不同提示数值实验。后续未改 memory tensor 运算，仍按来源明确标记结果。
 - 从公开 SGLang 完整压缩包加交付补丁独立安装，156373d 的 Nano fast/strict、
   Flash fast 实权重非空 S 请求均通过。目录名 native-topk 的一次 Flash 实验被
   旧 runner 覆盖成 stable C4，已明确限制其结论，不冒称 native C4 已验收。
@@ -85,3 +86,44 @@ Core 分支恢复 atomic writer 的状态池和事务实现，仅保留 memory g
   不通过延长时间掩盖死锁，不自动重放提交结果不确定的事务。
 - Nano 首份真实非空 S/C32 图节点时间线已采集；Flash 同类采集进行中。
   profiler 数据与正式性能隔离，后续报告区分 GPU 算子累计时长、重叠和暴露等待。
+
+## Follow-up execution: policy cleanup
+
+The execution plan is active. The first change fixes a real configuration
+mismatch: the adapter accepted `true`/`TRUE` for native profile switches, while
+four patched dependency modules accepted only `1`. Both now use the same
+case-insensitive spelling. A regression evaluates the actual patched boolean
+expressions for enabled, disabled and absent inputs. Historical GPU attempts
+used `1`; this change does not reinterpret their results. GPU acceptance of the
+updated dependency is pending.
+
+The optional stable-C4 architecture qualification list and its override have
+been removed. CUDA availability, actual kernel width and dependency API checks
+remain. Hardware qualification belongs in validation evidence. Query-plan
+comments and test-module prose were corrected without changing tensor math.
+
+Remaining plan-A work includes fixed mHC split geometry, query chunk budgets,
+prewarm/default launch policy, and documenting supported integration boundaries.
+This checkpoint is not a declaration that the complete cleanup has passed GPU
+acceptance or that subsequent performance candidates are ready for integration.
+
+Query chunk validation now follows native page geometry rather than a fixed
+2048-token memory write event. It requires a positive budget that can admit at
+least one native KV page; complete atomic commits still use the existing whole
+request guard. Pinned native admission rounds intermediate query boundaries to
+pages, which is the actual progress constraint. GPU validation of smaller query
+budgets is pending.
+
+Flash mHC prewarm is disabled only when the resolved chunk budget is the native
+unchunked sentinel. Positive budgets retain the native/operator warmup setting.
+The effective setting is recorded in startup identity. This corrects the former
+unconditional override; it does not change the default unchunked execution.
+
+Fixed mHC partitions are now positive integer configuration, rather than a
+64/16384 model-shape allowlist. The bundled native DeepGEMM kernel distributes
+K blocks (including remainders) among the configured splits. This change leaves
+the released default of 64 unchanged and delegates backend geometry legality
+to the native implementation. CPU tests execute the actual patched function
+for multiple widths/partitions; native-kernel and model-level GPU checks are
+still required for changed partitions. No alternative partition is promoted
+as qualified by these CPU checks.
