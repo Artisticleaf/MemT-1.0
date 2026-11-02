@@ -86,3 +86,44 @@ Core 分支恢复 atomic writer 的状态池和事务实现，仅保留 memory g
   不通过延长时间掩盖死锁，不自动重放提交结果不确定的事务。
 - Nano 首份真实非空 S/C32 图节点时间线已采集；Flash 同类采集进行中。
   profiler 数据与正式性能隔离，后续报告区分 GPU 算子累计时长、重叠和暴露等待。
+
+## Follow-up execution: policy cleanup
+
+The execution plan is active. The first change fixes a real configuration
+mismatch: the adapter accepted `true`/`TRUE` for native profile switches, while
+four patched dependency modules accepted only `1`. Both now use the same
+case-insensitive spelling. A regression evaluates the actual patched boolean
+expressions for enabled, disabled and absent inputs. Historical GPU attempts
+used `1`; this change does not reinterpret their results. GPU acceptance of the
+updated dependency is pending.
+
+The optional stable-C4 architecture qualification list and its override have
+been removed. CUDA availability, actual kernel width and dependency API checks
+remain. Hardware qualification belongs in validation evidence. Query-plan
+comments and test-module prose were corrected without changing tensor math.
+
+Remaining plan-A work includes fixed mHC split geometry, query chunk budgets,
+prewarm/default launch policy, and documenting supported integration boundaries.
+This checkpoint is not a declaration that the complete cleanup has passed GPU
+acceptance or that subsequent performance candidates are ready for integration.
+
+Query chunk validation now follows native page geometry rather than a fixed
+2048-token memory write event. It requires a positive budget that can admit at
+least one native KV page; complete atomic commits still use the existing whole
+request guard. Pinned native admission rounds intermediate query boundaries to
+pages, which is the actual progress constraint. GPU validation of smaller query
+budgets is pending.
+
+Flash mHC prewarm is disabled only when the resolved chunk budget is the native
+unchunked sentinel. Positive budgets retain the native/operator warmup setting.
+The effective setting is recorded in startup identity. This corrects the former
+unconditional override; it does not change the default unchunked execution.
+
+Fixed mHC partitions are now positive integer configuration, rather than a
+64/16384 model-shape allowlist. The bundled native DeepGEMM kernel distributes
+K blocks (including remainders) among the configured splits. This change leaves
+the released default of 64 unchanged and delegates backend geometry legality
+to the native implementation. CPU tests execute the actual patched function
+for multiple widths/partitions; native-kernel and model-level GPU checks are
+still required for changed partitions. No alternative partition is promoted
+as qualified by these CPU checks.
